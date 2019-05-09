@@ -115,7 +115,7 @@ class COCOPipeline(Pipeline):
             ratio=True,
             ltrb=True,
             skip_empty = True,
-            random_shuffle=True,
+            random_shuffle=False,
             shuffle_after_epoch=True)
 
         self.decode = ops.HostDecoder(device = "cpu", output_type = types.RGB)

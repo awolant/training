@@ -221,15 +221,15 @@ def train300_mlperf_coco(args):
 
     #print("Number of labels: {}".format(train_coco.labelnum))
 
-    if args.distributed:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(train_coco)
-    else:
-        train_sampler = None
-    train_dataloader = DataLoader(train_coco,
-                                  batch_size=args.batch_size,
-                                  shuffle=(train_sampler is None),
-                                  sampler=train_sampler,
-                                  num_workers=4)
+    # if args.distributed:
+    #     train_sampler = torch.utils.data.distributed.DistributedSampler(train_coco)
+    # else:
+    #     train_sampler = None
+    # train_dataloader = DataLoader(train_coco,
+    #                               batch_size=args.batch_size,
+    #                               shuffle=(train_sampler is None),
+    #                               sampler=train_sampler,
+    #                               num_workers=4)
     # set shuffle=True in DataLoader
     ssd_print(key=mlperf_log.INPUT_SHARD, value=None)
     ssd_print(key=mlperf_log.INPUT_ORDER)
@@ -282,26 +282,27 @@ def train300_mlperf_coco(args):
     train_pipe = COCOPipeline(args.batch_size, args.local_rank, train_coco_root,
                         train_annotate, N_gpu, num_threads=4,
                         output_fp16=False, seed=local_seed - 2**31)
+    train_pipe.build()
 
     train_loader = DALIGenericIterator(
         train_pipe, 
         ["images", "boxes", "labels"], 
-        118287 / N_gpu, 
+        train_pipe.epoch_size('train_reader') / N_gpu, 
         stop_at_epoch=False)
 
 
     for epoch in range(args.epochs):
         ssd_print(key=mlperf_log.TRAIN_EPOCH, value=epoch)
         # set the epoch for the sampler
-        if args.distributed:
-            train_sampler.set_epoch(epoch)
-        for nbatch, (img, img_size, bbox, label) in enumerate(train_dataloader):
-        # for nbatch, data in enumerate(train_loader):
+        # if args.distributed:
+        #     train_sampler.set_epoch(epoch)
+        # for nbatch, (img, img_size, bbox, label) in enumerate(train_dataloader):
+        for nbatch, data in enumerate(train_loader):
 
-            # img = data[0]["images"]
-            # bbox = data[0]["boxes"]
-            # label = data[0]["labels"]
-            # label = label.type(torch.cuda.LongTensor)
+            img = data[0]["images"]
+            bbox = data[0]["boxes"]
+            label = data[0]["labels"]
+            label = label.type(torch.cuda.LongTensor)
 
             if iter_num == (160000 * 32) // global_batch_size:
                 current_lr *= 0.1
@@ -366,6 +367,7 @@ def train300_mlperf_coco(args):
                 if success[0]:
                     return True
             iter_num += 1
+        train_loader.reset()
     return False
 
 def main():
