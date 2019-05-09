@@ -13,6 +13,9 @@ import numpy as np
 from mlperf_compliance import mlperf_log
 from mlperf_logger import ssd_print, broadcast_seeds
 
+from coco_pipeline import COCOPipeline
+from nvidia.dali.plugin.pytorch import DALIGenericIterator
+
 def parse_args():
     parser = ArgumentParser(description="Train Single Shot MultiBox Detector"
                                         " on COCO")
@@ -178,6 +181,7 @@ def train300_mlperf_coco(args):
         except:
             raise ImportError("Please install APEX from https://github.com/nvidia/apex")
 
+    local_seed = args.seed
     if args.distributed:
         # necessary pytorch imports
         import torch.utils.data.distributed
@@ -275,6 +279,16 @@ def train300_mlperf_coco(args):
     if use_cuda:
         success = success.cuda()
 
+    train_pipe = COCOPipeline(args.batch_size, args.local_rank, train_coco_root,
+                        train_annotate, N_gpu, num_threads=4,
+                        output_fp16=False, seed=local_seed - 2**31)
+
+    train_loader = DALIGenericIterator(
+        train_pipe, 
+        ["images", "boxes", "labels"], 
+        118287 / N_gpu, 
+        stop_at_epoch=False)
+
 
     for epoch in range(args.epochs):
         ssd_print(key=mlperf_log.TRAIN_EPOCH, value=epoch)
@@ -282,6 +296,12 @@ def train300_mlperf_coco(args):
         if args.distributed:
             train_sampler.set_epoch(epoch)
         for nbatch, (img, img_size, bbox, label) in enumerate(train_dataloader):
+        # for nbatch, data in enumerate(train_loader):
+
+            # img = data[0]["images"]
+            # bbox = data[0]["boxes"]
+            # label = data[0]["labels"]
+            # label = label.type(torch.cuda.LongTensor)
 
             if iter_num == (160000 * 32) // global_batch_size:
                 current_lr *= 0.1
